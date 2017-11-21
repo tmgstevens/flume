@@ -15,7 +15,7 @@
 
 
 ======================================
-Flume 1.8.0-SNAPSHOT User Guide
+Flume 1.9.0-SNAPSHOT User Guide
 ======================================
 
 Introduction
@@ -1284,6 +1284,12 @@ useFlumeEventFormat                 false        By default events are taken as 
                                                  true to read events as the Flume Avro binary format. Used in conjunction with the same property
                                                  on the KafkaSink or with the parseAsFlumeEvent property on the Kafka Channel this will preserve
                                                  any Flume headers sent on the producing side.
+setTopicHeader                      true         When set to true, stores the topic of the retrieved message into a header, defined by the
+                                                 ``topicHeader`` property.
+topicHeader                         topic        Defines the name of the header in which to store the name of the topic the message was received
+                                                 from, if the ``setTopicHeader`` property is set to ``true``. Care should be taken if combining
+                                                 with the Kafka Sink ``topicHeader`` property so as to avoid sending the message back to the same
+                                                 topic in a loop.
 migrateZookeeperOffsets             true         When no Kafka stored offset is found, look up the offsets in Zookeeper and commit them to Kafka.
                                                  This should be true to support seamless Kafka client migration from older versions of Flume.
                                                  Once migrated this can be set to false, though that should generally not be required.
@@ -1521,19 +1527,19 @@ Acts like ``nc -u -k -l [host] [port]``.
 
 Required properties are in **bold**.
 
-==================  ===========  ===========================================
-Property Name       Default      Description
-==================  ===========  ===========================================
-**channels**        --
-**type**            --           The component type name, needs to be ``netcatudp``
-**bind**            --           Host name or IP address to bind to
-**port**            --           Port # to bind to
-remoteAddressHeader --
-selector.type       replicating  replicating or multiplexing
-selector.*                       Depends on the selector.type value
-interceptors        --           Space-separated list of interceptors
+===================  ===========  ===========================================
+Property Name        Default      Description
+===================  ===========  ===========================================
+**channels**         --
+**type**             --           The component type name, needs to be ``netcatudp``
+**bind**             --           Host name or IP address to bind to
+**port**             --           Port # to bind to
+remoteAddressHeader  --
+selector.type        replicating  replicating or multiplexing
+selector.*                        Depends on the selector.type value
+interceptors         --           Space-separated list of interceptors
 interceptors.*
-==================  ===========  ===========================================
+===================  ===========  ===========================================
 
 Example for agent named a1:
 
@@ -1719,25 +1725,43 @@ unavailable status.
 All events sent in one post request are considered to be one batch and
 inserted into the channel in one transaction.
 
-=================  ============================================  =====================================================================================
-Property Name      Default                                       Description
-=================  ============================================  =====================================================================================
-**type**                                                         The component type name, needs to be ``http``
-**port**           --                                            The port the source should bind to.
-bind               0.0.0.0                                       The hostname or IP address to listen on
-handler            ``org.apache.flume.source.http.JSONHandler``  The FQCN of the handler class.
-handler.*          --                                            Config parameters for the handler
-selector.type      replicating                                   replicating or multiplexing
-selector.*                                                       Depends on the selector.type value
-interceptors       --                                            Space-separated list of interceptors
-interceptors.*
-enableSSL          false                                         Set the property true, to enable SSL. *HTTP Source does not support SSLv3.*
-excludeProtocols   SSLv3                                         Space-separated list of SSL/TLS protocols to exclude. SSLv3 is always excluded.
-keystore                                                         Location of the keystore includng keystore file name
-keystorePassword                                                 Keystore password
-======================================================================================================================================================
+This source is based on Jetty 9.4 and offers the ability to set additional
+Jetty-specific parameters which will be passed directly to the Jetty components.
 
-For example, a http source for agent named a1:
+====================  ============================================  =====================================================================================
+Property Name         Default                                       Description
+====================  ============================================  =====================================================================================
+**type**                                                            The component type name, needs to be ``http``
+**port**              --                                            The port the source should bind to.
+bind                  0.0.0.0                                       The hostname or IP address to listen on
+handler               ``org.apache.flume.source.http.JSONHandler``  The FQCN of the handler class.
+handler.*             --                                            Config parameters for the handler
+selector.type         replicating                                   replicating or multiplexing
+selector.*                                                          Depends on the selector.type value
+interceptors          --                                            Space-separated list of interceptors
+interceptors.*
+enableSSL             false                                         Set the property true, to enable SSL. *HTTP Source does not support SSLv3.*
+excludeProtocols      SSLv3                                         Space-separated list of SSL/TLS protocols to exclude. SSLv3 is always excluded.
+keystore                                                            Location of the keystore includng keystore file name
+keystorePassword                                                    Keystore password
+QueuedThreadPool.*                                                  Jetty specific settings to be set on org.eclipse.jetty.util.thread.QueuedThreadPool.
+                                                                    N.B. QueuedThreadPool will only be used if at least one property of this class is set.
+HttpConfiguration.*                                                 Jetty specific settings to be set on org.eclipse.jetty.server.HttpConfiguration
+SslContextFactory.*                                                 Jetty specific settings to be set on org.eclipse.jetty.util.ssl.SslContextFactory (only
+                                                                    applicable when *enableSSL* is set to true).
+ServerConnector.*                                                   Jetty specific settings to be set on org.eclipse.jetty.server.ServerConnector
+=========================================================================================================================================================
+
+N.B. Jetty-specific settings are set using the setter-methods on the objects listed above. For full details see the Javadoc for these classes
+(`QueuedThreadPool <http://www.eclipse.org/jetty/javadoc/9.4.6.v20170531/org/eclipse/jetty/util/thread/QueuedThreadPool.html>`_,
+`HttpConfiguration <http://www.eclipse.org/jetty/javadoc/9.4.6.v20170531/org/eclipse/jetty/server/HttpConfiguration.html>`_,
+`SslContextFactory <http://www.eclipse.org/jetty/javadoc/9.4.6.v20170531/org/eclipse/jetty/util/ssl/SslContextFactory.html>`_ and
+`ServerConnector <http://www.eclipse.org/jetty/javadoc/9.4.6.v20170531/org/eclipse/jetty/server/ServerConnector.html>`_).
+
+When using Jetty-specific setings, named properites above will take precedence (for example excludeProtocols will take
+precedence over SslContextFactory.ExcludeProtocols). All properties will be inital lower case.
+
+An example http source for agent named a1:
 
 .. code-block:: properties
 
@@ -1748,6 +1772,8 @@ For example, a http source for agent named a1:
   a1.sources.r1.channels = c1
   a1.sources.r1.handler = org.example.rest.RestHandler
   a1.sources.r1.handler.nickname = random props
+  a1.sources.r1.HttpConfiguration.sendServerVersion = false
+  a1.sources.r1.ServerConnector.idleTimeout = 300
 
 JSONHandler
 '''''''''''
@@ -2534,6 +2560,10 @@ timeout              60000                                                      
                                                                                    all events in a transaction.
 serializer           org.apache.flume.sink.hbase.SimpleAsyncHbaseEventSerializer
 serializer.*         --                                                            Properties to be passed to the serializer.
+async.*              --                                                            Properties to be passed to asyncHbase library.
+                                                                                   These properties have precedence over the old ``zookeeperQuorum`` and ``znodeParent`` values.
+                                                                                   You can find the list of the available properties at
+                                                                                   `the documentation page of AsyncHBase <http://opentsdb.github.io/asynchbase/docs/build/html/configuration.html#properties>`_.
 ===================  ============================================================  ====================================================================================
 
 Note that this sink takes the Zookeeper Quorum and parent znode information in
@@ -2785,6 +2815,9 @@ partitionIdHeader                   --                   When set, the sink will
                                                          from the event header and send the message to the specified partition of the topic. If the
                                                          value represents an invalid partition, an EventDeliveryException will be thrown. If the header value
                                                          is present then this setting overrides ``defaultPartitionId``.
+allowTopicOverride                  true                 When set, the sink will allow a message to be produced into a topic specified by the ``topicHeader`` property (if provided).
+topicHeader                         topic                When set in conjunction with ``allowTopicOverride`` will produce a message into the value of the header named using the value of this property.
+                                                         Care should be taken when using in conjunction with the Kafka Source ``topicHeader`` property to avoid creating a loopback.
 kafka.producer.security.protocol    PLAINTEXT            Set to SASL_PLAINTEXT, SASL_SSL or SSL if writing to Kafka using some level of security. See below for additional info on secure setup.
 *more producer security props*                           If using SASL_PLAINTEXT, SASL_SSL or SSL refer to `Kafka security <http://kafka.apache.org/documentation.html#security>`_ for additional
                                                          properties that need to be set on producer.
@@ -2830,7 +2863,7 @@ argument.
     a1.sinks.k1.kafka.flumeBatchSize = 20
     a1.sinks.k1.kafka.producer.acks = 1
     a1.sinks.k1.kafka.producer.linger.ms = 1
-    a1.sinks.ki.kafka.producer.compression.type = snappy
+    a1.sinks.k1.kafka.producer.compression.type = snappy
 
 
 **Security and Kafka Sink:**
@@ -3956,15 +3989,16 @@ Timestamp Interceptor
 ~~~~~~~~~~~~~~~~~~~~~
 
 This interceptor inserts into the event headers, the time in millis at which it processes the event. This interceptor
-inserts a header with key ``timestamp`` whose value is the relevant timestamp. This interceptor
-can preserve an existing timestamp if it is already present in the configuration.
+inserts a header with key ``timestamp`` (or as specified by the ``header`` property) whose value is the relevant timestamp.
+This interceptor can preserve an existing timestamp if it is already present in the configuration.
 
-================  =======  ========================================================================
-Property Name     Default  Description
-================  =======  ========================================================================
-**type**          --       The component type name, has to be ``timestamp`` or the FQCN
-preserveExisting  false    If the timestamp already exists, should it be preserved - true or false
-================  =======  ========================================================================
+================  =========  ========================================================================
+Property Name     Default    Description
+================  =========  ========================================================================
+**type**          --         The component type name, has to be ``timestamp`` or the FQCN
+header            timestamp  The name of the header in which to place the generated timestamp.
+preserveExisting  false      If the timestamp already exists, should it be preserved - true or false
+================  =========  ========================================================================
 
 Example for agent named a1:
 
@@ -4244,7 +4278,7 @@ Log4J Appender
 
 Appends Log4j events to a flume agent's avro source. A client using this
 appender must have the flume-ng-sdk in the classpath (eg,
-flume-ng-sdk-1.8.0-SNAPSHOT.jar).
+flume-ng-sdk-1.9.0-SNAPSHOT.jar).
 Required properties are in **bold**.
 
 =====================  =======  ==================================================================================
@@ -4308,7 +4342,7 @@ Load Balancing Log4J Appender
 
 Appends Log4j events to a list of flume agent's avro source. A client using this
 appender must have the flume-ng-sdk in the classpath (eg,
-flume-ng-sdk-1.8.0-SNAPSHOT.jar). This appender supports a round-robin and random
+flume-ng-sdk-1.9.0-SNAPSHOT.jar). This appender supports a round-robin and random
 scheme for performing the load balancing. It also supports a configurable backoff
 timeout so that down agents are removed temporarily from the set of hosts
 Required properties are in **bold**.
