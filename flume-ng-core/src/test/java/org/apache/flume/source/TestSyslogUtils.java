@@ -26,6 +26,10 @@ import org.junit.Test;
 
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
+import java.time.Clock;
+import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.HashSet;
@@ -196,29 +200,40 @@ public class TestSyslogUtils {
    */
   @Test
   public void TestRfc3164Dates() throws ParseException {
-    for (int i = -10; i <= 1; i++) {
-      SimpleDateFormat sdf = new SimpleDateFormat("MMM  d hh:MM:ss");
-      Date date = new Date(System.currentTimeMillis());
-      Calendar cal = Calendar.getInstance();
-      cal.setTime(date);
-      cal.add(Calendar.MONTH, i);
-
-      //Small tweak to avoid the 1 month in the future ticking over by a few seconds between now
-      //and when the checkHeader actually runs
-      if (i == 1) {
-        cal.add(Calendar.DAY_OF_MONTH, -1);
+    
+    //We're going to run this test using a mocked clock, once for the next 13 months
+    for (int monthOffset = 0; monthOffset<=12; monthOffset++) {
+      Clock mockClock = Clock.fixed(LocalDateTime.now().plusMonths(1).toInstant(ZoneOffset.UTC),
+          Clock.systemDefaultZone().getZone());
+      
+      SyslogUtils.setClock(mockClock);
+      
+      //We're then going to try input dates (without the year) for all 12 months, starting
+      //10 months ago, and finishing next month (all relative to our mocked clock)
+      for (int i = -10; i <= 1; i++) {
+        SimpleDateFormat sdf = new SimpleDateFormat("MMM  d hh:MM:ss");
+        Date date = new Date(mockClock.millis());
+        Calendar cal = Calendar.getInstance();
+        cal.setTime(date);
+        cal.add(Calendar.MONTH, i);
+  
+        //Small tweak to avoid the 1 month in the future ticking over by a few seconds between now
+        //and when the checkHeader actually runs
+        if (i == 1) {
+          cal.add(Calendar.DAY_OF_MONTH, -1);
+        }
+  
+        String stamp1 = sdf.format(cal.getTime());
+  
+        String year = String.valueOf(cal.get(Calendar.YEAR));
+        String format1 = "yyyyMMM d HH:mm:ss";
+        String host1 = "ubuntu-11.cloudera.com";
+        String data1 = "some msg";
+  
+        // timestamp with 'Z' appended, translates to UTC
+        String msg1 = "<10>" + stamp1 + " " + host1 + " " + data1 + "\n";
+        checkHeader(msg1, year + stamp1, format1, host1, data1);
       }
-
-      String stamp1 = sdf.format(cal.getTime());
-
-      String year = String.valueOf(cal.get(Calendar.YEAR));
-      String format1 = "yyyyMMM d HH:mm:ss";
-      String host1 = "ubuntu-11.cloudera.com";
-      String data1 = "some msg";
-
-      // timestamp with 'Z' appended, translates to UTC
-      String msg1 = "<10>" + stamp1 + " " + host1 + " " + data1 + "\n";
-      checkHeader(msg1, year + stamp1, format1, host1, data1);
     }
   }
 

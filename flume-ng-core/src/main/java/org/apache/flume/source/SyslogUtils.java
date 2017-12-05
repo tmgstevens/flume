@@ -30,6 +30,7 @@ import org.slf4j.LoggerFactory;
 import java.io.ByteArrayOutputStream;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
+import java.time.Clock;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Calendar;
@@ -97,6 +98,7 @@ public class SyslogUtils {
   private boolean isIncompleteEvent;
   private Integer maxSize;
   private Set<String> keepFields;
+  private static Clock clock;
 
   private class SyslogFormatter {
     public Pattern regexPattern;
@@ -202,8 +204,27 @@ public class SyslogUtils {
     baos = new ByteArrayOutputStream(eventSize);
     this.keepFields = keepFields;
     initHeaderFormats();
+    initDefaultClock();
   }
 
+  static Clock getClock() { 
+    return clock; 
+  }
+  
+  static void setClock(Clock newClock) { 
+    clock = newClock;
+  }
+  
+  void initDefaultClock() {
+    if (clock==null) {
+      setClock(
+        Clock.system(
+          Clock.systemDefaultZone().getZone() 
+        )
+      );
+    }
+  }
+  
   // extend the default header formatter
   public void addFormats(Map<String, String> formatProp) {
     if (formatProp.isEmpty() || !formatProp.containsKey(
@@ -394,19 +415,22 @@ public class SyslogUtils {
                   calPlusElevenMonths.setTime(parsedDate);
                   calPlusElevenMonths.add(Calendar.MONTH, +11);
 
-                  if (cal.getTimeInMillis() > System.currentTimeMillis() &&
-                      calMinusOneMonth.getTimeInMillis() > System.currentTimeMillis()) {
+                  //This call makes sure we use the static clock, thus improving testability
+                  long currentTimeMillis = getClock().millis();
+                  
+                  if (cal.getTimeInMillis() > currentTimeMillis &&
+                      calMinusOneMonth.getTimeInMillis() > currentTimeMillis) {
                     //Need to roll back a year
                     Calendar c1 = Calendar.getInstance();
                     c1.setTime(parsedDate);
                     c1.add(Calendar.YEAR, -1);
                     parsedDate = c1.getTime();
-                  } else if (cal.getTimeInMillis() < System.currentTimeMillis() &&
-                             calPlusElevenMonths.getTimeInMillis() < System.currentTimeMillis()) {
+                  } else if (cal.getTimeInMillis() < currentTimeMillis &&
+                             calPlusElevenMonths.getTimeInMillis() < currentTimeMillis) {
                     //Need to roll forward a year
                     Calendar c1 = Calendar.getInstance();
                     c1.setTime(parsedDate);
-                    c1.add(Calendar.YEAR, -1);
+                    c1.add(Calendar.YEAR, +1);
                     parsedDate = c1.getTime();
                   }
                 }
